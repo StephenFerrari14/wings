@@ -1,0 +1,7 @@
+metadata:
+  name: Table1
+  format: csv
+  data_path: ./examples/data
+schema:
+  name: String
+  id: int
