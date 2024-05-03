@@ -3,5 +3,10 @@ metadata:
   format: csv
   data_path: ./examples/data
 schema:
-  name: String
   id: int
+  col1: text
+  col2: text
+  col3: text
+  col4: text
+  col5: text
+  created_at: text

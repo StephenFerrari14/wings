@@ -1,13 +1,12 @@
 use std::{
     collections::BTreeMap,
-    fs::{File, FileType},
+    fs::File,
     io::Error,
-    path::PathBuf,
-    sync::RwLock,
+    path::PathBuf, time::SystemTime,
 };
 
 use csv::{ReaderBuilder, StringRecord};
-use sqlite::{Connection, State, Value};
+use sqlite::{Connection, Value};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::metadata::{self, TableMetadata};
@@ -67,7 +66,6 @@ fn read(file_name: DirEntry, format: &String) -> Result<Vec<BTreeMap<String, Str
             {
               // Read and print the headers
               let headers = rdr.headers()?;
-              println!("Headers: {:?}", headers);
               perm_headers = headers.clone();
             }
             // Iterate over each record (row) in the CSV file
@@ -75,8 +73,6 @@ fn read(file_name: DirEntry, format: &String) -> Result<Vec<BTreeMap<String, Str
                 let mut row: BTreeMap<String, String> = BTreeMap::new();
                 // Extract the record
                 let record = result?;
-                // Print the record
-                println!("{:?}", record);
                 for entry in record.iter().enumerate() {
                     let key = perm_headers.get(entry.0).unwrap();
                     row.insert(key.to_string(), entry.1.to_string());
@@ -101,40 +97,17 @@ fn project(
 fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
     // For table get table.yaml metadata (parallelize)
     for table in tables {
-        let table_metadata = metadata::get_table_metadata(table);
+        let now = SystemTime::now();
+        let table_metadata = metadata::get_table_metadata(table).unwrap();
         //   Get table schema
         //   Create table in sqlite
         let create_table_sql = schema_to_db(&table_metadata);
-        println!("{}", create_table_sql);
         connection.execute(create_table_sql).unwrap();
 
         //   Get data_path and format
         //   For all files in data_path with format (parallelize)
         let data_path = table_metadata.metadata.data_path.clone();
         let format = table_metadata.metadata.format.clone();
-        let mut rows: Vec<BTreeMap<String, String>> = Vec::new();
-        for entry in WalkDir::new(data_path) {
-            println!("Finding data...");
-            //     Read data
-            let raw_rows = read(entry.unwrap(), &format);
-            match raw_rows {
-                Ok(ok_rows) => {
-                  for row in ok_rows {
-                      //     Convert to table schema
-                      // let converted_row = project(row, table_metadata.schema);
-                      let converted_row = row;
-                      //   return converted data as vec of rows
-                      rows.push(converted_row);
-                  }
-                }
-                Err(_) => panic!("Cannot read data rows"),
-            }
-        }
-
-        if rows.len() == 0 {
-          println!("No rows found");
-          return;
-        }
 
         // Either specify fields in insert or make sure values are in the right order
         let columns: Vec<String> = table_metadata.schema.keys().cloned().collect();
@@ -148,7 +121,43 @@ fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
             "INSERT INTO {} ({}) VALUES ({})",
             table_metadata.metadata.name, columns_clause, values_clause
         );
+
+
+        let mut rows: Vec<BTreeMap<String, String>> = Vec::new();
+        let file_now = SystemTime::now();
+        for entry in WalkDir::new(data_path) {
+            // Read data
+            let raw_rows = read(entry.unwrap(), &format);
+            match raw_rows {
+                Ok(ok_rows) => {
+                  for row in ok_rows {
+                      //     Convert to table schema
+                      // let converted_row = project(row, table_metadata.schema);
+                      let converted_row = row;
+                      rows.push(converted_row);
+                  }
+                }
+                Err(_) => panic!("Cannot read data rows"),
+            }
+        }
+        match file_now.elapsed() {
+            Ok(elapsed) => {
+                println!("Files read for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+            }
+            Err(e) => {
+                // an error occurred!
+                println!("Error: {e:?}");
+            }
+        }
+
+        if rows.len() == 0 {
+          println!("No rows found");
+          return;
+        }
+
+        
         // Do this in batches instead of single inserts
+        let insert_now = SystemTime::now();
         for row in rows {
             let mut statement = connection.prepare(query.clone()).unwrap();
             // For each row create a vector of tuples that is
@@ -162,21 +171,33 @@ fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
                         (values[index].as_str(), row.get(f).unwrap().as_str().into());
                     index = index + 1;
                     return bind_var;
-                    // bind_vars.push(bind_var.clone());
                 })
                 .collect();
-            println!("Insert row");
             let res = statement.bind_iter::<_, (_, Value)>(bind_vars);
             match res {
-                Ok(_) => println!("Rows inserted"),
+                Ok(_) => (),
                 Err(e) => println!("There was an error inserting data. {}", e),
             }
 
-            statement.next();
-            // while let Ok(State::Row) = statement.next() {
-            //     println!("id = {}", statement.read::<i64, _>("id").unwrap());
-            //     println!("name = {}", statement.read::<String, _>("name").unwrap());
-            // }
+            let _ = statement.next();
+        }
+        match insert_now.elapsed() {
+            Ok(elapsed) => {
+                println!("Data insert for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+            }
+            Err(e) => {
+                // an error occurred!
+                println!("Error: {e:?}");
+            }
+        }
+        match now.elapsed() {
+            Ok(elapsed) => {
+                println!("File load for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+            }
+            Err(e) => {
+                // an error occurred!
+                println!("Error: {e:?}");
+            }
         }
     }
 }

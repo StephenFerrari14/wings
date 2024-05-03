@@ -15,6 +15,11 @@ Run
 ```
 cargo run -- <command>
 ```
+Ex.
+```
+cargo run -- create --table test_table --config examples/schema.yaml --file-path ./examples/data/ --format csv
+cargo run -- query "select * from test_table"
+```
 
 Build
 ```
@@ -27,19 +32,16 @@ cargo test
 ```
 
 ## TODO
-- Add descriptions to commands
+- Try multithreading/async
+- Tests
+- Query optimization (counts, limits, etc)
 - Fix unwraps
 - Format as enum
-- Remove --query from query command
-- Add query result rendering
-- Performance timers and logging
-- Test for large amount of large files
-- Try different performance improvements
-- Tests
-- Query parser for multiple tables
 - Wild card in data path
 - Loader for avro/parquet/json
 - Auto detect schema
 - Schema types validation
 - Maybe an option to put all data not in schema into json column
--  env var for testing config
+- env var for testing config
+- Query parser for multiple tables
+- Add logger

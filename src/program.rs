@@ -14,3 +14,12 @@ pub fn init() {
           .unwrap_or_else(|err| panic!("Error creating config, {}", err));
   }
 }
+
+pub fn does_program_directory_exist() -> bool {
+  let homedir = home_dir().unwrap_or_else(|| {
+    panic!("Cannot find home directory, create home directory to continue.")
+  });
+  let mut wings_dir = homedir.clone();
+  wings_dir.push(".wings");
+  wings_dir.exists()
+}

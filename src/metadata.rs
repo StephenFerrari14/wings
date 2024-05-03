@@ -1,6 +1,8 @@
 use std::{collections::BTreeMap, fmt::format, fs, path::PathBuf};
 
-use serde::{Serialize, Deserialize};
+use clap::builder::Str;
+use serde::{Deserialize, Serialize};
+use serde_yaml::Error;
 
 pub fn get_path_for_table(table: &String) -> PathBuf{
   let homedir = dirs::home_dir().unwrap_or_else(|| {
@@ -13,14 +15,14 @@ pub fn get_path_for_table(table: &String) -> PathBuf{
   return table_path
 }
 
-pub fn create_table(table: &String, config: &PathBuf, file_path: &String, format: &String) {
+pub fn create_table(table: &String, config: &PathBuf, file_path: &String, format: &String) -> Result<(), Error> {
     // Add table and config to dir
     // Strcuture
     // ~/.wings/tables/$tableName.toml
     let table_path = get_path_for_table(table);
 
     if table_path.exists() {
-        println!("Table {} already exists. Drop and create to update.", table)
+        println!("Table {} already exists. Drop and create to update.", table);
     } else {
         // Create
         let mut map: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
@@ -34,12 +36,13 @@ pub fn create_table(table: &String, config: &PathBuf, file_path: &String, format
         map.insert("metadata".to_string(), meta_map);
         // schema
         let contents = fs::read_to_string(config).unwrap();
-        let schema_map: BTreeMap<String, String> = serde_yaml::from_str(&contents).unwrap();
+        let schema_map: BTreeMap<String, String> = serde_yaml::from_str(&contents)?;
         map.insert("schema".to_string(), schema_map);
-        let yaml = serde_yaml::to_string(&map).unwrap();
+        let yaml = serde_yaml::to_string(&map)?;
         let _ = fs::write(table_path, yaml);
-        println!("Table {} created", table)
+        println!("Table {} created", table);
     }
+    Ok(())
 }
 
 pub fn drop_table(table: &String) {
@@ -50,6 +53,11 @@ pub fn drop_table(table: &String) {
   } else {
       println!("Table does not exist to drop.")
   }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+enum Format {
+  Csv,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -77,19 +85,19 @@ impl TableMetadata {
   }
 }
 
-pub fn get_table_metadata(table_path: PathBuf) -> TableMetadata {
+pub fn get_table_metadata(table_path: PathBuf) -> Result<TableMetadata, Error> {
   let contents = fs::read_to_string(table_path)
         .expect("Should have been able to read the file");
 
-  let table_metadata: TableMetadata = serde_yaml::from_str(&contents).unwrap();
-  return table_metadata;
+  let table_metadata: TableMetadata = serde_yaml::from_str(&contents)?;
+  return Ok(table_metadata);
 }
 
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, path::{Path, PathBuf}};
 
-    use crate::metadata::TableMetadata;
+    use crate::metadata::{Format, TableMetadata};
 
     use super::Metadata;
 

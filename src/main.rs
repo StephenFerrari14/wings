@@ -1,58 +1,59 @@
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
 use clap::{Parser, Subcommand};
+use sqlite::Error;
 
-mod program;
-mod metadata;
-mod query_parser;
 mod data_loader;
+mod metadata;
+mod program;
+mod query_parser;
+mod display_row;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Optional name to operate on
-    // name: Option<String>,
-
-    // /// Sets a custom config file
-    // #[arg(short, long, value_name = "FILE")]
-    // config: Option<PathBuf>,
-
-    // /// Turn debugging information on
-    // #[arg(short, long, action = clap::ArgAction::Count)]
-    // debug: u8,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Initialize program
     Init,
+    /// Create table to query
     Create {
+        /// Name of table
         #[arg(short, long)]
         table: String,
+        /// Path to table schema yaml
         #[arg(short, long, value_name = "FILE")]
         config: PathBuf,
+        /// Path to search for data
         #[arg(short, long)]
         file_path: String,
+        /// Format of files to load
         #[arg(long)]
         format: String, // Make into Enum
     },
+    /// Drop given table
     Drop {
-        #[arg(short, long)]
+        /// Table to drop
+        // #[arg(short, long)]
         table: String,
     },
+    /// Query data using wings
     Query {
-        #[arg(short, long)]
+        /// Query to execute
+        // #[arg(short, long)]
         query: String,
     },
 }
 
 fn main() {
     let cli = Cli::parse();
+    simple_logger::SimpleLogger::new().env().init().unwrap();
 
-    let connection = sqlite::open(":memory:").unwrap();
-    // let connection = sqlite::open("./database").unwrap();
+    let not_initialized_message = "Wings not initialized, run `wings init` first.";
 
     match &cli.command {
         Some(Commands::Init) => {
@@ -65,59 +66,124 @@ fn main() {
             file_path,
             format,
         }) => {
-            metadata::create_table(table, config, file_path, format);
+            if program::does_program_directory_exist() {
+                let _ = metadata::create_table(table, config, file_path, format);
+            } else {
+                println!("{}", not_initialized_message)
+            }
         }
         Some(Commands::Drop { table }) => {
-            metadata::drop_table(table);
+            if program::does_program_directory_exist() {
+                metadata::drop_table(table);
+            } else {
+                println!("{}", not_initialized_message)
+            }
         }
         Some(Commands::Query { query }) => {
-            
-            let tables = query_parser::get_tables_from_query(query);
-            println!("{}", tables.join(","));
-
-            let missing_tables = tables.iter().any(|table| {
-                let table_path = metadata::get_path_for_table(&table);
-                if !table_path.exists() {
-                    println!("Table {} doesn't exist. Create it first with `wings create`", table);
-                    return true;
-                } else {
-                    return false;
-                }
-            });
-
-            if missing_tables {
-                return;
-            }
-
-            let table_paths: Vec<PathBuf> = tables.iter().map(|table| {
-                let table_path = metadata::get_path_for_table(&table);
-                return table_path
-            }).collect();
-
-            println!("{:?}", table_paths[0].to_str());
-
-            data_loader::load(&connection, table_paths);
-
-            // Query
-            println!("Running query...");
-            connection
-            .iterate(query, |pairs| {
-                // Render logic
-                let mut row = String::from("");
-                for &(name, value) in pairs.iter() {
-                    match value {
-                        Some(wvalue) => row = row + wvalue + ", ",
-                        None => row = row + "NULL, ",
+            if program::does_program_directory_exist() {
+                let now = SystemTime::now();
+                let _ = run_query(query);
+                match now.elapsed() {
+                    Ok(elapsed) => {
+                        println!("Query ran in {}ms", elapsed.as_millis());
+                    }
+                    Err(e) => {
+                        // an error occurred!
+                        println!("Error: {e:?}");
                     }
                 }
-                println!("{}", row);
-                true
-            })
-            .unwrap();
-            println!("Done.");
+            } else {
+                println!("{}", not_initialized_message)
+            }
         }
         None => {
             println!("Use --help for command details.")
         }
     }
+}
+
+fn run_query(query: &String) -> Result<(), Error> {
+    println!("Running query...");
+    let now = SystemTime::now();
+    let tables = query_parser::get_tables_from_query(query);
+
+    let missing_tables = tables.iter().any(|table| {
+        let table_path = metadata::get_path_for_table(&table);
+        if !table_path.exists() {
+            println!(
+                "Table {} doesn't exist. Create it first with `wings create`",
+                table
+            );
+            return true;
+        } else {
+            return false;
+        }
+    });
+
+    if missing_tables {
+        return Ok(());
+    }
+
+    let table_paths: Vec<PathBuf> = tables
+        .iter()
+        .map(|table| {
+            let table_path = metadata::get_path_for_table(&table);
+            return table_path;
+        })
+        .collect();
+
+    match now.elapsed() {
+        Ok(elapsed) => {
+            println!("Table operations ran in {}ms", elapsed.as_millis());
+        }
+        Err(e) => {
+            // an error occurred!
+            println!("Error: {e:?}");
+        }
+    }
+
+    let now = SystemTime::now();
+    let connection = sqlite::open(":memory:")?;
+    // let connection = sqlite::open("./database").unwrap();
+    data_loader::load(&connection, table_paths);
+    match now.elapsed() {
+        Ok(elapsed) => {
+            println!("Loader ran in {}ms", elapsed.as_millis());
+        }
+        Err(e) => {
+            // an error occurred!
+            println!("Error: {e:?}");
+        }
+    }
+
+    // Query
+    let now = SystemTime::now();
+    
+    let mut rows: Vec<HashMap<String, String>> = Vec::new();
+    connection
+        .iterate(query, |pairs| {
+            // Render logic
+            let mut row: HashMap<String, String> = HashMap::new();
+            for &(name, value) in pairs.iter() {
+                match value {
+                    Some(wvalue) => row.insert(name.to_string(), wvalue.to_string()),
+                    None => row.insert(name.to_string(), "NULL".to_string()),
+                };
+            }
+            rows.push(row);
+            true
+        })?;
+    let display_rows = display_row::display_rows_from_maps(rows);
+    display_row::render(display_rows);
+
+    match now.elapsed() {
+        Ok(elapsed) => {
+            println!("SQLite query and render ran in {}ms", elapsed.as_millis());
+        }
+        Err(e) => {
+            // an error occurred!
+            println!("Error: {e:?}");
+        }
+    }
+    Ok(())
 }
