@@ -8,6 +8,8 @@ mod metadata;
 mod program;
 mod query_parser;
 mod display_row;
+mod rayon_loader;
+mod utils;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
