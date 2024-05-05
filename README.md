@@ -32,13 +32,17 @@ cargo test
 ```
 
 ## TODO
-- Try multithreading/async
+- Clean up
+- Show tables
+- Show table definition
 - Tests
+- Insert to database optimization
 - Query optimization (counts, limits, etc)
 - Fix unwraps
 - Format as enum
 - Wild card in data path
-- Loader for avro/parquet/json
+- Loader for avro/parquet
+- Converter and Loader for json
 - Auto detect schema
 - Schema types validation
 - Maybe an option to put all data not in schema into json column

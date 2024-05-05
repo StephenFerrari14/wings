@@ -17,3 +17,4 @@ simple_logger = "4.3.3"
 sqlite = "0.34.0"
 walkdir = "2"
 pad = "0.1"
+tokio = { version = "1", features = ["full"] }

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, time::SystemTime};
 
 use rayon::prelude::*;
 use sqlite::{Connection, Value};
@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
+    println!("Rayon load");
     // For table get table.yaml metadata (parallelize)
     //   Get table schema
     //   Create table in sqlite
@@ -20,6 +21,7 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
     //   return converted data as vec of rows
     //   Insert rows into sqlite
     for table in tables {
+        let now = SystemTime::now();
         let table_metadata = metadata::get_table_metadata(table).unwrap();
         //   Get table schema
         //   Create table in sqlite
@@ -43,7 +45,8 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
             "INSERT INTO {} ({}) VALUES ({})",
             table_metadata.metadata.name, columns_clause, values_clause
         );
-
+        
+        let file_now = SystemTime::now();
         let files: Vec<PathBuf> = WalkDir::new(data_path)
             .into_iter()
             .map(|f| return f.unwrap().path().to_path_buf())
@@ -60,6 +63,21 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
                 }
             })
             .collect();
+        match file_now.elapsed() {
+            Ok(elapsed) => {
+                println!(
+                    "Files read for {} in {}ms",
+                    table_metadata.metadata.name,
+                    elapsed.as_millis()
+                );
+            }
+            Err(e) => {
+                // an error occurred!
+                println!("Error: {e:?}");
+            }
+        }
+
+        let insert_now = SystemTime::now();
         for rows in rayon_rows {
             for row in rows {
                 let mut statement = connection.prepare(query.clone()).unwrap();
@@ -85,5 +103,23 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
                 let _ = statement.next();
             }
         }
+        match insert_now.elapsed() {
+            Ok(elapsed) => {
+                println!("Data insert for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+            }
+            Err(e) => {
+                // an error occurred!
+                println!("Error: {e:?}");
+            }
+        }
+        match now.elapsed() {
+          Ok(elapsed) => {
+              println!("File load for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+          }
+          Err(e) => {
+              // an error occurred!
+              println!("Error: {e:?}");
+          }
+      }
     }
 }

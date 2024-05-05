@@ -4,6 +4,7 @@ import random
 
 
 def generate_csv(filename, num_rows):
+  
     with open(filename, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         
@@ -32,8 +33,9 @@ def generate_csv(filename, num_rows):
             writer.writerow(row)
             
 if __name__ == "__main__":
-  # generate_csv("./examples/large_data/data.csv", 1000000)
+  # generate_csv("../wings-data/large_data/data.csv", 1000000)
+  generate_csv("../wings-data/single_medium_data/data.csv", 100000)
   # for i in range(100000):
-  #   generate_csv(f"./examples/many_data/data_{i}.csv", 10)
-  for i in range(100):
-    generate_csv(f"../wings-data/medium_data/data_{i}.csv", 1000)
+  #   generate_csv(f"../wings-data/many_data/data_{i}.csv", 10)
+  # for i in range(100):
+  #   generate_csv(f"../wings-data/medium_data/data_{i}.csv", 1000)

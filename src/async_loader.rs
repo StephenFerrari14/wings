@@ -1,54 +1,19 @@
-use std::{
-    collections::BTreeMap,
-    fs::File,
-    io::Error,
-    path::PathBuf, time::SystemTime,
-};
-
-use csv::{ReaderBuilder, StringRecord};
 use sqlite::{Connection, Value};
+use std::{collections::BTreeMap, path::PathBuf, time::SystemTime};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::{async_loader, metadata::{self, TableMetadata}, rayon_loader, utils::{read, schema_to_db}};
+use crate::{
+    metadata,
+    utils::{read, read_async, schema_to_db},
+};
 
-enum RunMode {
-    ForLoop,
-    Async,
-    Rayon,
+struct LoadEntry {
+    entry: DirEntry,
+    format: String,
 }
 
 pub async fn load(connection: &Connection, tables: Vec<PathBuf>) {
-    // In series first then parallelize, add timers
-
-    // For table get table.yaml metadata (parallelize)
-    //   Get table schema
-    //   Create table in sqlite
-    //   Get data_path and format
-    //   For all files in data_path with format (parallelize)
-    //     Read data
-    //     Convert to table schema
-    //   return converted data as vec of rows
-    //   Insert rows into sqlite
-
-    let mode = RunMode::Rayon;
-    // Tokio and Rayon seem pretty similar
-    match mode {
-        RunMode::ForLoop => for_loop_load(connection, tables),
-        RunMode::Async => async_loader::load(connection, tables).await,
-        RunMode::Rayon => rayon_loader::load(connection, tables),
-    }
-}
-
-fn project(
-    row: BTreeMap<String, String>,
-    schema: BTreeMap<String, String>,
-) -> BTreeMap<String, String> {
-    // TODO
-    return row;
-}
-
-fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
-    // For table get table.yaml metadata (parallelize)
+    println!("Async load");
     for table in tables {
         let now = SystemTime::now();
         let table_metadata = metadata::get_table_metadata(table).unwrap();
@@ -60,7 +25,7 @@ fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
         //   Get data_path and format
         //   For all files in data_path with format (parallelize)
         let data_path = table_metadata.metadata.data_path.clone();
-        let format = table_metadata.metadata.format.clone();
+        let format: String = table_metadata.metadata.format.clone();
 
         // Either specify fields in insert or make sure values are in the right order
         let columns: Vec<String> = table_metadata.schema.keys().cloned().collect();
@@ -75,27 +40,48 @@ fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
             table_metadata.metadata.name, columns_clause, values_clause
         );
 
+        // Put timer around this
+        let file_now = SystemTime::now();
+        let load_entries: Vec<LoadEntry> = WalkDir::new(data_path)
+            .into_iter()
+            .map(|entry| LoadEntry {
+                entry: entry.unwrap(),
+                format: format.clone(),
+            })
+            .collect();
+        // let file_now = SystemTime::now();
+        let tasks: Vec<
+            tokio::task::JoinHandle<Result<Vec<BTreeMap<String, String>>, std::io::Error>>,
+        > = load_entries
+            .into_iter()
+            .map(|load_entry| {
+                let handle = tokio::spawn(async {
+                    let raw_rows = read_async(load_entry.entry, load_entry.format);
+                    raw_rows
+                });
+                return handle;
+            })
+            .collect();
 
         let mut rows: Vec<BTreeMap<String, String>> = Vec::new();
-        let file_now = SystemTime::now();
-        for entry in WalkDir::new(data_path) {
-            // Read data
-            let raw_rows = read(entry.unwrap(), &format);
-            match raw_rows {
-                Ok(ok_rows) => {
-                  for row in ok_rows {
-                      //     Convert to table schema
-                      // let converted_row = project(row, table_metadata.schema);
-                      let converted_row = row;
-                      rows.push(converted_row);
-                  }
+        for task in tasks {
+            let a = task.await.unwrap();
+            match a {
+                Ok(row) => {
+                    let mut a_row = row.clone();
+                    rows.append(&mut a_row)
                 }
-                Err(_) => panic!("Cannot read data rows"),
+                Err(_) => println!("Skipping row"),
             }
         }
+
         match file_now.elapsed() {
             Ok(elapsed) => {
-                println!("Files read for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+                println!(
+                    "Files read for {} in {}ms",
+                    table_metadata.metadata.name,
+                    elapsed.as_millis()
+                );
             }
             Err(e) => {
                 // an error occurred!
@@ -104,18 +90,17 @@ fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
         }
 
         if rows.len() == 0 {
-          println!("No rows found");
-          return;
+            println!("No rows found");
+            return;
         }
 
-        
         // Do this in batches instead of single inserts
         let insert_now = SystemTime::now();
         for row in rows {
             let mut statement = connection.prepare(query.clone()).unwrap();
             // For each row create a vector of tuples that is
             // (":column", "value")
- 
+
             let mut index = 0;
             let bind_vars: Vec<(&str, Value)> = columns
                 .iter()
@@ -136,7 +121,11 @@ fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
         }
         match insert_now.elapsed() {
             Ok(elapsed) => {
-                println!("Data insert for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+                println!(
+                    "Data insert for {} in {}ms",
+                    table_metadata.metadata.name,
+                    elapsed.as_millis()
+                );
             }
             Err(e) => {
                 // an error occurred!
@@ -145,7 +134,11 @@ fn for_loop_load(connection: &Connection, tables: Vec<PathBuf>) {
         }
         match now.elapsed() {
             Ok(elapsed) => {
-                println!("File load for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+                println!(
+                    "File load for {} in {}ms",
+                    table_metadata.metadata.name,
+                    elapsed.as_millis()
+                );
             }
             Err(e) => {
                 // an error occurred!

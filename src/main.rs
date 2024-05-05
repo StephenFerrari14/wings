@@ -9,6 +9,7 @@ mod program;
 mod query_parser;
 mod display_row;
 mod rayon_loader;
+mod async_loader;
 mod utils;
 
 #[derive(Parser)]
@@ -51,7 +52,8 @@ enum Commands {
     },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
     simple_logger::SimpleLogger::new().env().init().unwrap();
 
@@ -84,7 +86,7 @@ fn main() {
         Some(Commands::Query { query }) => {
             if program::does_program_directory_exist() {
                 let now = SystemTime::now();
-                let _ = run_query(query);
+                let _ = run_query(query).await;
                 match now.elapsed() {
                     Ok(elapsed) => {
                         println!("Query ran in {}ms", elapsed.as_millis());
@@ -104,7 +106,7 @@ fn main() {
     }
 }
 
-fn run_query(query: &String) -> Result<(), Error> {
+async fn run_query(query: &String) -> Result<(), Error> {
     println!("Running query...");
     let now = SystemTime::now();
     let tables = query_parser::get_tables_from_query(query);
@@ -147,7 +149,7 @@ fn run_query(query: &String) -> Result<(), Error> {
     let now = SystemTime::now();
     let connection = sqlite::open(":memory:")?;
     // let connection = sqlite::open("./database").unwrap();
-    data_loader::load(&connection, table_paths);
+    data_loader::load(&connection, table_paths).await;
     match now.elapsed() {
         Ok(elapsed) => {
             println!("Loader ran in {}ms", elapsed.as_millis());

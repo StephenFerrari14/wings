@@ -20,6 +20,10 @@ pub fn read(file_name: DirEntry, format: &String) -> Result<Vec<BTreeMap<String,
   read_path(file_name.path(), format)
 }
 
+pub fn read_async(file_name: DirEntry, format: String) -> Result<Vec<BTreeMap<String, String>>, Error> {
+  read_path(file_name.path(), &format)
+}
+
 pub fn read_path(path: &Path, format: &String) -> Result<Vec<BTreeMap<String, String>>, Error> {
   // Open the CSV file
   let mut rows: Vec<BTreeMap<String, String>> = Vec::new();
