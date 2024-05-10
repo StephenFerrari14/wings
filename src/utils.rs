@@ -20,15 +20,11 @@ pub fn read(file_name: DirEntry, format: &String) -> Result<Vec<BTreeMap<String,
   read_path(file_name.path(), format)
 }
 
-pub fn read_async(file_name: DirEntry, format: String) -> Result<Vec<BTreeMap<String, String>>, Error> {
-  read_path(file_name.path(), &format)
-}
-
 pub fn read_path(path: &Path, format: &String) -> Result<Vec<BTreeMap<String, String>>, Error> {
-  // Open the CSV file
+  // Open the file for given format
+  // Change to check extension
   let mut rows: Vec<BTreeMap<String, String>> = Vec::new();
-  // Something is wrong with this logic
-  if path.is_file() { //} && file_name.path().ends_with(format) {
+  if path.is_file() {
       if *format == String::from("csv") {
           let file = File::open(path)?;
 
@@ -36,6 +32,7 @@ pub fn read_path(path: &Path, format: &String) -> Result<Vec<BTreeMap<String, St
           let mut rdr = ReaderBuilder::new()
               .has_headers(true) // Specify that the CSV file has headers
               .from_reader(file);
+          #[allow(unused_assignments)]
           let mut perm_headers = StringRecord::new();
           {
             // Read and print the headers

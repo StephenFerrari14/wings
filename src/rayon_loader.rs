@@ -1,25 +1,36 @@
-use std::{path::{Path, PathBuf}, time::SystemTime};
+use std::{collections::BTreeMap, path::PathBuf, time::SystemTime};
 
 use rayon::prelude::*;
 use sqlite::{Connection, Value};
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 use crate::{
     metadata,
-    utils::{read, read_path, schema_to_db},
+    utils::{read_path, schema_to_db},
 };
 
-pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
-    println!("Rayon load");
-    // For table get table.yaml metadata (parallelize)
-    //   Get table schema
-    //   Create table in sqlite
-    //   Get data_path and format
-    //   For all files in data_path with format (parallelize)
-    //     Read data
-    //     Convert to table schema
-    //   return converted data as vec of rows
-    //   Insert rows into sqlite
+// verify return types
+pub fn load(
+    files: Vec<PathBuf>,
+    format: String,
+) -> Vec<Vec<BTreeMap<String, String>>> {
+    let rayon_rows: Vec<Vec<BTreeMap<String, String>>> = files
+        .par_iter()
+        .map(|entry| {
+            let raw_rows = read_path(entry.as_path(), &format);
+            match raw_rows {
+                Ok(ok_rows) => {
+                    // Add projection function here
+                    return ok_rows;
+                }
+                Err(_) => panic!("Cannot read data rows"),
+            }
+        })
+        .collect();
+    return rayon_rows;
+}
+
+pub fn load2(connection: &Connection, tables: Vec<PathBuf>) {
     for table in tables {
         let now = SystemTime::now();
         let table_metadata = metadata::get_table_metadata(table).unwrap();
@@ -45,12 +56,14 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
             "INSERT INTO {} ({}) VALUES ({})",
             table_metadata.metadata.name, columns_clause, values_clause
         );
-        
+
         let file_now = SystemTime::now();
         let files: Vec<PathBuf> = WalkDir::new(data_path)
             .into_iter()
             .map(|f| return f.unwrap().path().to_path_buf())
             .collect();
+
+        //// This is whats different
         let rayon_rows: Vec<Vec<std::collections::BTreeMap<String, String>>> = files
             .par_iter()
             .map(|entry| {
@@ -63,6 +76,7 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
                 }
             })
             .collect();
+        ////
         match file_now.elapsed() {
             Ok(elapsed) => {
                 println!(
@@ -105,21 +119,27 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
         }
         match insert_now.elapsed() {
             Ok(elapsed) => {
-                println!("Data insert for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
+                println!(
+                    "Data insert for {} in {}ms",
+                    table_metadata.metadata.name,
+                    elapsed.as_millis()
+                );
             }
             Err(e) => {
-                // an error occurred!
                 println!("Error: {e:?}");
             }
         }
         match now.elapsed() {
-          Ok(elapsed) => {
-              println!("File load for {} in {}ms", table_metadata.metadata.name, elapsed.as_millis());
-          }
-          Err(e) => {
-              // an error occurred!
-              println!("Error: {e:?}");
-          }
-      }
+            Ok(elapsed) => {
+                println!(
+                    "File load for {} in {}ms",
+                    table_metadata.metadata.name,
+                    elapsed.as_millis()
+                );
+            }
+            Err(e) => {
+                println!("Error: {e:?}");
+            }
+        }
     }
 }

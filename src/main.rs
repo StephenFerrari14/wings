@@ -3,14 +3,16 @@ use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 use clap::{Parser, Subcommand};
 use sqlite::Error;
 
+use crate::metadata::{get_metadata_for_display, render_tables};
+
 mod data_loader;
 mod metadata;
 mod program;
 mod query_parser;
 mod display_row;
 mod rayon_loader;
-mod async_loader;
 mod utils;
+mod for_loop_loader;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -50,10 +52,22 @@ enum Commands {
         // #[arg(short, long)]
         query: String,
     },
+    Show {
+        /// Show information about objects
+        #[command(subcommand)]
+        command: Option<ShowCommands>,
+    }
 }
 
-#[tokio::main]
-async fn main() {
+#[derive(Debug, Subcommand)]
+enum ShowCommands {
+    Tables,
+    Table { 
+        name: String 
+    },
+}
+
+fn main() {
     let cli = Cli::parse();
     simple_logger::SimpleLogger::new().env().init().unwrap();
 
@@ -86,7 +100,7 @@ async fn main() {
         Some(Commands::Query { query }) => {
             if program::does_program_directory_exist() {
                 let now = SystemTime::now();
-                let _ = run_query(query).await;
+                let _ = run_query(query);
                 match now.elapsed() {
                     Ok(elapsed) => {
                         println!("Query ran in {}ms", elapsed.as_millis());
@@ -100,13 +114,31 @@ async fn main() {
                 println!("{}", not_initialized_message)
             }
         }
+        Some(Commands::Show { command }) => {
+            match command {
+                Some(table) => {
+                    match table {
+                        ShowCommands::Tables => {
+                            render_tables();
+                        },
+                        ShowCommands::Table { name } => {
+                            match get_metadata_for_display(name) {
+                                Ok(metadata) => println!("{}", metadata),
+                                Err(error) => println!("{}", error),
+                            }
+                        },
+                    }
+                },
+                None => todo!(),
+            }
+        }
         None => {
             println!("Use --help for command details.")
         }
     }
 }
 
-async fn run_query(query: &String) -> Result<(), Error> {
+fn run_query(query: &String) -> Result<(), Error> {
     println!("Running query...");
     let now = SystemTime::now();
     let tables = query_parser::get_tables_from_query(query);
@@ -146,19 +178,9 @@ async fn run_query(query: &String) -> Result<(), Error> {
         }
     }
 
-    let now = SystemTime::now();
     let connection = sqlite::open(":memory:")?;
     // let connection = sqlite::open("./database").unwrap();
-    data_loader::load(&connection, table_paths).await;
-    match now.elapsed() {
-        Ok(elapsed) => {
-            println!("Loader ran in {}ms", elapsed.as_millis());
-        }
-        Err(e) => {
-            // an error occurred!
-            println!("Error: {e:?}");
-        }
-    }
+    data_loader::load(&connection, table_paths);
 
     // Query
     let now = SystemTime::now();
