@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, fs::File, io::Error, path::Path};
 
 use csv::{ReaderBuilder, StringRecord};
-use walkdir::DirEntry;
 
 use crate::metadata::TableMetadata;
 
@@ -14,10 +13,6 @@ pub fn schema_to_db(table_metadata: &TableMetadata) -> String {
       table_metadata.table_definition()
   );
   return create_table_statement;
-}
-
-pub fn read(file_name: DirEntry, format: &String) -> Result<Vec<BTreeMap<String, String>>, Error> {
-  read_path(file_name.path(), format)
 }
 
 pub fn read_path(path: &Path, format: &String) -> Result<Vec<BTreeMap<String, String>>, Error> {

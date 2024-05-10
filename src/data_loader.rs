@@ -3,8 +3,8 @@ use std::{collections::BTreeMap, path::PathBuf, time::SystemTime};
 use sqlite::{Connection, Value};
 use walkdir::WalkDir;
 
-use crate::{for_loop_loader, metadata};
 use crate::rayon_loader;
+use crate::{for_loop_loader, metadata};
 use crate::{metadata::TableMetadata, utils::schema_to_db};
 
 enum RunMode {
@@ -12,14 +12,6 @@ enum RunMode {
     ForLoop,
     Rayon,
 }
-
-// pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
-//     let mode = RunMode::Rayon;
-//     match mode {
-//         RunMode::ForLoop => for_loop_load(connection, tables),
-//         RunMode::Rayon => rayon_loader::load(connection, tables),
-//     }
-// }
 
 pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
     let mode = RunMode::Rayon;
@@ -39,13 +31,14 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
         // Either specify fields in insert or make sure values are in the right order
         let columns: Vec<String> = table_metadata.schema.keys().cloned().collect();
         let values: Vec<String> = columns.iter().map(|f| format!(":{}", f)).collect();
-        
+
         let load_now = SystemTime::now();
         let files: Vec<PathBuf> = WalkDir::new(data_path)
             .into_iter()
             .map(|f| return f.unwrap().path().to_path_buf())
             .collect();
 
+        #[allow(unused_assignments)]
         let mut rows = Vec::new();
         match mode {
             RunMode::ForLoop => {
@@ -172,11 +165,7 @@ pub fn load_db(
     }
     match insert_now.elapsed() {
         Ok(elapsed) => {
-            println!(
-                "load_db for {} in {}ms",
-                table_name,
-                elapsed.as_millis()
-            );
+            println!("load_db for {} in {}ms", table_name, elapsed.as_millis());
         }
         Err(e) => {
             // an error occurred!

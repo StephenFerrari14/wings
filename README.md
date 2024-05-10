@@ -43,11 +43,12 @@ cargo test
 ```
 
 ## TODO
+- Tests
+- Packager
 - Loader for avro/parquet
 - Converter and Loader for json
 - Projection function
 - Put flatten in loaders
-- Tests
 - Insert to database optimization
 - Query optimization (counts, limits, etc)
 - Implement projections function
