@@ -17,7 +17,6 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
     let mode = RunMode::Rayon;
 
     for table in tables {
-        let now = SystemTime::now();
         let table_metadata = metadata::get_table_metadata(table).unwrap();
         //   Get table schema
         //   Create table in sqlite
@@ -32,7 +31,6 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
         let columns: Vec<String> = table_metadata.schema.keys().cloned().collect();
         let values: Vec<String> = columns.iter().map(|f| format!(":{}", f)).collect();
 
-        let load_now = SystemTime::now();
         let files: Vec<PathBuf> = WalkDir::new(data_path)
             .into_iter()
             .map(|f| return f.unwrap().path().to_path_buf())
@@ -49,41 +47,13 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
             }
         }
 
-        match load_now.elapsed() {
-            Ok(elapsed) => {
-                println!(
-                    "run_mode::load for {} in {}ms",
-                    table_metadata.metadata.name,
-                    elapsed.as_millis()
-                );
-            }
-            Err(e) => {
-                // an error occurred!
-                println!("Error: {e:?}");
-            }
-        }
-
         if rows.len() == 0 {
             println!("No rows found");
             return;
         }
 
         // Put flatten in loaders
-        let flatten_now = SystemTime::now();
         let flat_rows = flatten(rows);
-        match flatten_now.elapsed() {
-            Ok(elapsed) => {
-                println!(
-                    "flatten for {} in {}ms",
-                    table_metadata.metadata.name,
-                    elapsed.as_millis()
-                );
-            }
-            Err(e) => {
-                // an error occurred!
-                println!("Error: {e:?}");
-            }
-        }
 
         // Do this in batches instead of single inserts
         load_db(
@@ -93,20 +63,6 @@ pub fn load(connection: &Connection, tables: Vec<PathBuf>) {
             values,
             flat_rows,
         );
-
-        match now.elapsed() {
-            Ok(elapsed) => {
-                println!(
-                    "data_loader::load for {} in {}ms",
-                    table_metadata.metadata.name,
-                    elapsed.as_millis()
-                );
-            }
-            Err(e) => {
-                // an error occurred!
-                println!("Error: {e:?}");
-            }
-        }
     }
 }
 
@@ -132,7 +88,6 @@ pub fn load_db(
     values: Vec<String>,
     rows: Vec<BTreeMap<String, String>>,
 ) {
-    let insert_now = SystemTime::now();
     let columns_clause = columns.join(",");
     let values_clause = values.join(",");
     let query = format!(
@@ -162,15 +117,6 @@ pub fn load_db(
         }
 
         let _ = statement.next();
-    }
-    match insert_now.elapsed() {
-        Ok(elapsed) => {
-            println!("load_db for {} in {}ms", table_name, elapsed.as_millis());
-        }
-        Err(e) => {
-            // an error occurred!
-            println!("Error: {e:?}");
-        }
     }
 }
 

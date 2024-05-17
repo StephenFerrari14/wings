@@ -109,12 +109,10 @@ pub struct TableMetadata {
 
 impl TableMetadata {
     pub fn table_definition(&self) -> String {
-        // Turn each entry in schema into table definition
-        let mut definition = String::from("");
-        for (key, value) in self.schema.iter() {
-            definition = definition + format!("{} {} NULL,\n", key, value).as_str();
-        }
-        definition = definition + "end int NULL"; // Fix
+        // For the given schema, turn all entries into column definition
+        let columns: Vec<String> = self.schema.iter().map(|(key, value)| format!("{} {} NULL", key, value)).collect();
+        // Combine columns
+        let definition = columns.join(",\n");
         return definition;
     }
 }

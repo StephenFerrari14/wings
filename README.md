@@ -3,11 +3,21 @@ Query tool for files with on the fly data loading written in Rust. Inspired by D
 
 ```
 Commands:
-  init    
-  create  
-  drop    
-  query   
+  init    Initialize program
+  create  Create table to query
+  drop    Drop given table
+  query   Query data using wings
+  show    Show information about objects
   help    Print this message or the help of the given subcommand(s)
+```
+
+## Install
+Install Rust
+```
+cd ~/
+git clone git@github.com:StephenFerrari14/wings.git
+cargo build --release
+export PATH=~/wings/target/release/:$PATH
 ```
 
 ## Development
@@ -15,7 +25,8 @@ Run
 ```
 cargo run -- <command>
 ```
-Ex.
+Ex.  
+CSV  
 ```
 cargo run -- create --table test_table --config examples/schema.yaml --file-path ./examples/data/ --format csv
 cargo run -- query "select * from test_table"
@@ -32,6 +43,23 @@ Running query...
 Query ran in 13ms
 ```
 
+AVRO
+```
+cargo run -- create --table avro_table --config examples/avro_schema.yaml --file-path ./examples/avro_data/ --format avro
+cargo run -- query "select * from avro_table"
+```
+Results
+```
+Running query...
++---------------------------------------------------------+
+|username  |timestamp |tweet                              |
++---------------------------------------------------------+
+|miguno    |1366150681|Rock: Nerf paper, scissors is fine.|
+|BlizzardCS|1366154481|Works as intended.  Terran is IMBA.|
++---------------------------------------------------------+
+Query ran in 5ms
+```
+
 Build
 ```
 cargo build
@@ -44,16 +72,14 @@ cargo test
 
 ## TODO
 - Tests
-- Packager
-- Loader for avro/parquet
+- Format as enum
+- Implement projections function
 - Converter and Loader for json
-- Projection function
 - Put flatten in loaders
 - Insert to database optimization
 - Query optimization (counts, limits, etc)
-- Implement projections function
+- Loader for parquet
 - Fix unwraps
-- Format as enum
 - Wild card in data path
 - Auto detect schema
 - Schema types validation

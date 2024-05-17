@@ -52,8 +52,8 @@ enum Commands {
         // #[arg(short, long)]
         query: String,
     },
+    /// Show information about objects
     Show {
-        /// Show information about objects
         #[command(subcommand)]
         command: Option<ShowCommands>,
     }
@@ -61,7 +61,9 @@ enum Commands {
 
 #[derive(Debug, Subcommand)]
 enum ShowCommands {
+    /// Show all tables created by wings
     Tables,
+    /// Show information for a given table
     Table { 
         name: String 
     },
@@ -140,7 +142,6 @@ fn main() {
 
 fn run_query(query: &String) -> Result<(), Error> {
     println!("Running query...");
-    let now = SystemTime::now();
     let tables = query_parser::get_tables_from_query(query);
 
     let missing_tables = tables.iter().any(|table| {
@@ -168,23 +169,11 @@ fn run_query(query: &String) -> Result<(), Error> {
         })
         .collect();
 
-    match now.elapsed() {
-        Ok(elapsed) => {
-            println!("Table operations ran in {}ms", elapsed.as_millis());
-        }
-        Err(e) => {
-            // an error occurred!
-            println!("Error: {e:?}");
-        }
-    }
-
     let connection = sqlite::open(":memory:")?;
     // let connection = sqlite::open("./database").unwrap();
     data_loader::load(&connection, table_paths);
 
     // Query
-    let now = SystemTime::now();
-    
     let mut rows: Vec<HashMap<String, String>> = Vec::new();
     connection
         .iterate(query, |pairs| {
@@ -201,15 +190,5 @@ fn run_query(query: &String) -> Result<(), Error> {
         })?;
     let display_rows = display_row::display_rows_from_maps(rows);
     display_row::render(display_rows);
-
-    match now.elapsed() {
-        Ok(elapsed) => {
-            println!("SQLite query and render ran in {}ms", elapsed.as_millis());
-        }
-        Err(e) => {
-            // an error occurred!
-            println!("Error: {e:?}");
-        }
-    }
     Ok(())
 }
