@@ -105,7 +105,7 @@ pub fn load_db(
             .iter()
             .map(|f| {
                 let bind_var: (&str, Value) =
-                    (values[index].as_str(), row.get(f).unwrap().as_str().into());
+                    (values[index].as_str(), row.get(f).unwrap_or(&String::from("null")).as_str().into());
                 index = index + 1;
                 return bind_var;
             })

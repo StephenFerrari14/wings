@@ -1,5 +1,5 @@
 # Wings
-Query tool for files with on the fly data loading written in Rust. Inspired by Dremel.
+Query tool for files with on the fly data loading written in Rust. Inspired by [Dremel](https://research.google/pubs/dremel-interactive-analysis-of-web-scale-datasets-2/).
 
 ```
 Commands:
@@ -11,8 +11,17 @@ Commands:
   help    Print this message or the help of the given subcommand(s)
 ```
 
+See `examples/schema.yaml` for example schema configuration.
+
+Supported formats
+- csv
+- json
+- avro
+
 ## Install
 Install Rust
+
+### Build
 ```
 cd ~/
 git clone git@github.com:StephenFerrari14/wings.git
@@ -29,6 +38,7 @@ Ex.
 CSV  
 ```
 cargo run -- create --table test_table --config examples/schema.yaml --file-path ./examples/data/ --format csv
+
 cargo run -- query "select * from test_table"
 ```
 Results
@@ -40,12 +50,13 @@ Running query...
 |gegfcecdfg|79|NULL|2024-04-29 22:45:02|fgdebgcace|fefgebcdca|aefecagbga|ddaacgdaff|
 |bfgbadadca|53|NULL|2024-04-29 22:45:02|fgdgdfdaac|bcaeegfdeg|gbbccecaag|adbdgbfggd|
 +----------------------------------------------------------------------------------+
-Query ran in 13ms
+Query ran in 3ms
 ```
 
 AVRO
 ```
 cargo run -- create --table avro_table --config examples/avro_schema.yaml --file-path ./examples/avro_data/ --format avro
+
 cargo run -- query "select * from avro_table"
 ```
 Results
@@ -60,6 +71,16 @@ Running query...
 Query ran in 5ms
 ```
 
+JSON
+
+For the json format each json file is processed as a single record. `json_array` and `json_path` format can be used to query multiple records in a single file.
+
+```
+cargo run -- create -t json_table -c ./examples/schema.yaml -f examples/json_data/ --format json
+
+cargo run -- query "select * from json_table"
+```
+
 Build
 ```
 cargo build
@@ -70,15 +91,23 @@ Test
 cargo test
 ```
 
+## Build for windows
+```
+rustup target add x86_64-pc-windows-gnu
+brew install mingw-w64
+cargo build --release --target x86_64-pc-windows-gnu
+```
+
 ## TODO
 - Tests
 - Format as enum
 - Implement projections function
-- Converter and Loader for json
+- Add json arrays format
+- Add json path format
 - Put flatten in loaders
 - Insert to database optimization
 - Query optimization (counts, limits, etc)
-- Loader for parquet
+- Add parquet format
 - Fix unwraps
 - Wild card in data path
 - Auto detect schema

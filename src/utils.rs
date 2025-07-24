@@ -1,10 +1,11 @@
-use std::{collections::BTreeMap, fs::File, io::Error, path::Path};
+use std::{collections::BTreeMap, fs::File, io::{BufReader, Error}, path::Path};
 
 use apache_avro::{
     from_value,
     Reader,
 };
 use csv::{ReaderBuilder, StringRecord};
+use serde_json::Value;
 
 use crate::metadata::TableMetadata;
 
@@ -82,7 +83,28 @@ pub fn read_path(path: &Path, format: &String) -> Result<Vec<BTreeMap<String, St
                     Err(e) => println!("Error: {}", e),
                 };
             }
+        } else if *format == "json" && path.extension().unwrap() == "json" {
+            match read_json_format(path) {
+                Ok(map) => rows.push(map),
+                Err(_) => println!("Skipping file: {:?}. Not JSON", path),
+            }
         }
     }
     Ok(rows)
+}
+
+fn read_json_format(path: &Path) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let json_value: Value = serde_json::from_reader(reader)?;
+    let map: BTreeMap<String, String> = match json_value {
+        Value::Object(map) => map.into_iter()
+            .map(|(k,v)| (k, v.to_string()))
+            .collect(),
+        _ => {
+            println!("JSON is not an object.");
+            return Err("JSON root is not an object".into());
+        }
+    };
+    Ok(map)
 }
